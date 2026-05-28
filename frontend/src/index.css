@@ -1,0 +1,60 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  body {
+    @apply bg-gray-950 text-gray-100 font-sans;
+  }
+  * {
+    @apply box-border;
+  }
+}
+
+@layer components {
+  .card {
+    @apply bg-gray-900 border border-gray-800 rounded-xl p-5;
+  }
+  .btn-primary {
+    @apply bg-blue-600 hover:bg-blue-700 text-white font-medium px-4 py-2 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed;
+  }
+  .btn-secondary {
+    @apply bg-gray-800 hover:bg-gray-700 text-gray-200 font-medium px-4 py-2 rounded-lg transition-colors;
+  }
+  .btn-danger {
+    @apply bg-red-600 hover:bg-red-700 text-white font-medium px-4 py-2 rounded-lg transition-colors;
+  }
+  .input {
+    @apply bg-gray-800 border border-gray-700 text-gray-100 rounded-lg px-3 py-2 w-full focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500;
+  }
+  .label {
+    @apply text-sm font-medium text-gray-400 mb-1 block;
+  }
+  .badge-good {
+    @apply bg-green-900 text-green-300 text-xs px-2 py-0.5 rounded-full;
+  }
+  .badge-fair {
+    @apply bg-yellow-900 text-yellow-300 text-xs px-2 py-0.5 rounded-full;
+  }
+  .badge-poor {
+    @apply bg-orange-900 text-orange-300 text-xs px-2 py-0.5 rounded-full;
+  }
+  .badge-very-poor {
+    @apply bg-red-900 text-red-300 text-xs px-2 py-0.5 rounded-full;
+  }
+}
+
+/* Leaflet map dark theme */
+.leaflet-container {
+  background: #1e293b !important;
+  border-radius: 0.75rem;
+}
+.leaflet-tile {
+  filter: brightness(0.8) saturate(0.9);
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: #1e293b; }
+::-webkit-scrollbar-thumb { background: #475569; border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: #64748b; }

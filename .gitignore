@@ -1,0 +1,89 @@
+# =========================
+# Python
+# =========================
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual Environment
+.venv/
+venv/
+env/
+
+# Python Packaging
+*.egg-info/
+build/
+dist/
+.eggs/
+
+# =========================
+# Environment Variables
+# =========================
+.env
+*.env
+backend/.env
+
+# =========================
+# ML Models & Cache
+# =========================
+*.pt
+*.pth
+*.onnx
+backend/ml_models/
+backend/.cache/
+.cache/
+
+# =========================
+# Backend Runtime Data
+# =========================
+backend/uploads/
+backend/detected_images/
+backend/reports/
+backend/logs/
+*.log
+
+# =========================
+# Frontend
+# =========================
+frontend/node_modules/
+frontend/dist/
+frontend/build/
+
+# =========================
+# Database Files
+# =========================
+*.db
+*.sqlite3
+chroma/
+mongodb_data/
+
+# =========================
+# Test & Temporary Files
+# =========================
+test_*.py
+test_*.jpg
+test_*.jpeg
+test_*.png
+test_*.xlsx
+test_*.pdf
+tmp/
+temp/
+
+# =========================
+# IDE / Editor
+# =========================
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# =========================
+# OS Files
+# =========================
+.DS_Store
+Thumbs.db
+
+# =========================
+# Requirements & Large Assets
+# =========================
+requirement/
