@@ -256,11 +256,31 @@ async def pause_video_processing(video_id: str):
             {"$set": {"status": "paused", "updated_at": datetime.utcnow()}}
         )
 
+    # ── Auto-start next queued video ──────────────────────────────────────────
+    # When a video is paused, automatically start the next queued video
+    # so the worker is never idle
+    next_queued = await db.videos.find_one(
+        {"status": "queued", "_id": {"$ne": ObjectId(video_id)}},
+        sort=[("created_at", 1)]  # oldest first
+    )
+    next_started = None
+    if next_queued:
+        next_video_id = str(next_queued["_id"])
+        next_task_id  = next_queued.get("task_id", "")
+        celery_task   = process_video.delay(next_video_id, next_task_id)
+        await db.videos.update_one(
+            {"_id": next_queued["_id"]},
+            {"$set": {"celery_task_id": celery_task.id, "status": "queued"}}
+        )
+        next_started = next_video_id
+        logger.info(f"Auto-started next queued video: {next_video_id}")
+
     return {
         "message": "Processing paused",
         "video_id": video_id,
         "progress_saved": video.get("progress", 0),
         "frames_processed": video.get("frames_processed", 0),
+        "next_video_started": next_started,
     }
 
 
@@ -365,12 +385,34 @@ async def cancel_video_processing(video_id: str):
                 {"$set": {"status": "cancelled", "updated_at": datetime.utcnow()}}
             )
 
+    # ── Auto-start next queued video ──────────────────────────────────────────
+    next_queued = await db.videos.find_one(
+        {"status": "queued", "_id": {"$ne": ObjectId(video_id)}},
+        sort=[("created_at", 1)]
+    )
+    next_started = None
+    if next_queued:
+        next_video_id = str(next_queued["_id"])
+        next_task_id  = next_queued.get("task_id", "")
+        celery_task   = process_video.delay(next_video_id, next_task_id)
+        await db.videos.update_one(
+            {"_id": next_queued["_id"]},
+            {"$set": {"celery_task_id": celery_task.id}}
+        )
+        next_started = next_video_id
+        logger.info(f"Auto-started next queued video after cancel: {next_video_id}")
+
     return {
         "message": "Processing cancelled",
         "video_id": video_id,
         "frames_detected_so_far": detected_count,
+        "next_video_started": next_started,
         "note": "Detected frames are preserved. You can still view results and download partial reports."
     }
+
+
+@router.delete("/{video_id}")
+async def delete_video(video_id: str):
     """Delete a video and its detections."""
     db = get_db()
     try:
@@ -379,6 +421,12 @@ async def cancel_video_processing(video_id: str):
         raise HTTPException(status_code=400, detail="Invalid video ID")
     if not video:
         raise HTTPException(status_code=404, detail="Video not found")
+
+    # Revoke any active Celery task first
+    celery_task_id = video.get("celery_task_id")
+    if celery_task_id and video.get("status") in ("processing", "queued"):
+        from celery_app import celery_app
+        celery_app.control.revoke(celery_task_id, terminate=True, signal="SIGTERM")
 
     # Delete video file
     file_path = video.get('file_path')
@@ -389,10 +437,20 @@ async def cancel_video_processing(video_id: str):
     await db.detections.delete_many({"video_id": video_id})
     await db.videos.delete_one({"_id": ObjectId(video_id)})
 
+    # Auto-start next queued video
+    next_queued = await db.videos.find_one(
+        {"status": "queued", "_id": {"$ne": ObjectId(video_id)}},
+        sort=[("created_at", 1)]
+    )
+    if next_queued:
+        next_video_id = str(next_queued["_id"])
+        celery_task   = process_video.delay(next_video_id, next_queued.get("task_id", ""))
+        await db.videos.update_one(
+            {"_id": next_queued["_id"]},
+            {"$set": {"celery_task_id": celery_task.id}}
+        )
+
     return {"message": f"Video {video_id} deleted"}
-
-
-@router.get("/{video_id}/report/download")
 async def download_report(video_id: str, format: str = "excel"):
     """Download the generated report for a video."""
     db = get_db()
