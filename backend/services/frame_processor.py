@@ -478,32 +478,32 @@ def compute_road_health_score(
     100 = perfect, 0 = very poor.
 
     IRI thresholds (IRC standard):
-      < 2.0  = Very Good (score 40)
-      2-4    = Good      (score 30-40)
-      4-6    = Fair      (score 20-30)
-      6-8    = Poor      (score 10-20)
-      > 8    = Very Poor (score 0-10)
+      < 2.0  = Very Good
+      2-4    = Good
+      4-6    = Fair
+      6-8    = Poor
+      > 8    = Very Poor
     """
-    # Clamp IRI to realistic range 0.5–10
     iri = max(0.5, min(iri, 10.0))
 
     # IRI score (0-40 points)
     if iri < 2.0:
         iri_score = 40.0
     elif iri < 4.0:
-        iri_score = 40.0 - (iri - 2.0) * 5.0   # 40→30
+        iri_score = 40.0 - (iri - 2.0) * 10.0   # 40→20
     elif iri < 6.0:
-        iri_score = 30.0 - (iri - 4.0) * 5.0   # 30→20
+        iri_score = 20.0 - (iri - 4.0) * 7.5    # 20→5
     elif iri < 8.0:
-        iri_score = 20.0 - (iri - 6.0) * 5.0   # 20→10
+        iri_score = 5.0 - (iri - 6.0) * 2.5     # 5→0
     else:
-        iri_score = max(0.0, 10.0 - (iri - 8.0) * 5.0)
+        iri_score = 0.0
 
     # Defect density score (0-40 points)
+    # density = defects per frame
+    # 0 = 40pts, 0.05 = 30pts, 0.15 = 20pts, 0.3 = 10pts, 0.5+ = 0pts
     if total_frames > 0:
         density = defect_count / total_frames
-        # density 0 = 40pts, density 0.5+ = 0pts
-        defect_score = max(0.0, 40.0 - density * 80.0)
+        defect_score = max(0.0, 40.0 - density * 120.0)
     else:
         defect_score = 40.0
 

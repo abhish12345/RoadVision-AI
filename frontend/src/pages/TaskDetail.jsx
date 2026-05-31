@@ -29,6 +29,7 @@ export default function TaskDetail() {
   const [captureMode, setCaptureMode] = useState('interval')
   const [captureInterval, setCaptureInterval] = useState(10)
   const [notifEmail, setNotifEmail] = useState('')
+  const [startChainage, setStartChainage] = useState('')
   const pollingRef = useRef({})
 
   const load = async () => {
@@ -79,6 +80,7 @@ export default function TaskDetail() {
       fd.append('capture_mode', captureMode)
       fd.append('capture_interval', captureInterval)
       fd.append('notification_email', notifEmail)
+      fd.append('start_chainage', startChainage || '0')
       fd.append('file', files[0])
       try {
         const res = await uploadVideo(fd, setUploadProgress)
@@ -258,6 +260,22 @@ export default function TaskDetail() {
             value={notifEmail}
             onChange={e => setNotifEmail(e.target.value)}
           />
+        </div>
+
+        <div>
+          <label className="label">Start Chainage (km) <span className="text-red-400">*</span></label>
+          <input
+            type="number"
+            className="input"
+            placeholder="e.g. 215.010"
+            step="0.001"
+            min="0"
+            value={startChainage}
+            onChange={e => setStartChainage(e.target.value)}
+          />
+          <p className="text-xs text-gray-600 mt-1">
+            Enter the road chainage (km) at the start of this video. Used for accurate chainage calculation.
+          </p>
         </div>
 
         {/* Drop zone */}
