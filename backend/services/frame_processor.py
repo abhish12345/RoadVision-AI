@@ -52,15 +52,16 @@ def assess_frame_quality(frame: np.ndarray) -> float:
 def extract_frames_by_interval(
     video_path: str,
     output_dir: Path,
-    capture_mode: str,       # "interval" (meters) or "fps"
-    capture_value: float,    # meters or fps
+    capture_mode: str,
+    capture_value: float,
     task_id: str,
     video_id: str,
+    user_start_chainage: float = 0.0,
     progress_callback=None
 ) -> Generator[Dict[str, Any], None, None]:
     """
     Extract frames from video based on capture mode.
-    Yields frame info dicts for each extracted frame.
+    user_start_chainage: the actual road chainage at video start (km), provided by user.
     """
     cap = cv2.VideoCapture(video_path)
     if not cap.isOpened():
@@ -94,7 +95,8 @@ def extract_frames_by_interval(
 
     # OCR state — track last known telemetry
     last_ocr: Dict[str, Any] = {}
-    start_chainage = None
+    # Use user_start_chainage as the base — overridden by OCR if available
+    start_chainage = user_start_chainage if user_start_chainage > 0 else None
     start_lat = None
     start_lon = None
 
@@ -135,11 +137,21 @@ def extract_frames_by_interval(
                 if start_lat is None:
                     start_lat = lat
                     start_lon = lon
-                    start_chainage = chainage or 0.0
+                    # Priority: OCR chainage > user_start_chainage > 0
+                    if start_chainage is None:
+                        start_chainage = chainage or user_start_chainage or 0.0
+                    elif chainage:
+                        start_chainage = chainage  # OCR wins if available
                 elif chainage is None and start_lat:
+                    # GPS-based chainage from user-provided start
                     chainage = estimate_chainage_from_gps(
                         lat, lon, start_lat, start_lon, start_chainage
                     )
+            elif start_chainage is not None and chainage is None:
+                # No GPS yet — use frame-based distance estimate
+                # Assume 30 km/h average speed
+                elapsed_km = (frame_num / fps) * (30 / 3600)
+                chainage = start_chainage + elapsed_km
 
             # Update step dynamically if speed available
             if capture_mode == "interval" and current_ocr.get('speed'):
@@ -464,19 +476,47 @@ def compute_road_health_score(
     """
     Compute overall road health score 0-100.
     100 = perfect, 0 = very poor.
+
+    IRI thresholds (IRC standard):
+      < 2.0  = Very Good (score 40)
+      2-4    = Good      (score 30-40)
+      4-6    = Fair      (score 20-30)
+      6-8    = Poor      (score 10-20)
+      > 8    = Very Poor (score 0-10)
     """
-    # IRI score (0-40 points): IRI < 2 = 40, IRI > 8 = 0
-    iri_score = max(0, 40 - (iri - 2) * 8) if iri > 2 else 40
+    # Clamp IRI to realistic range 0.5–10
+    iri = max(0.5, min(iri, 10.0))
+
+    # IRI score (0-40 points)
+    if iri < 2.0:
+        iri_score = 40.0
+    elif iri < 4.0:
+        iri_score = 40.0 - (iri - 2.0) * 5.0   # 40→30
+    elif iri < 6.0:
+        iri_score = 30.0 - (iri - 4.0) * 5.0   # 30→20
+    elif iri < 8.0:
+        iri_score = 20.0 - (iri - 6.0) * 5.0   # 20→10
+    else:
+        iri_score = max(0.0, 10.0 - (iri - 8.0) * 5.0)
 
     # Defect density score (0-40 points)
     if total_frames > 0:
-        defect_density = defect_count / total_frames
-        defect_score = max(0, 40 - defect_density * 200)
+        density = defect_count / total_frames
+        # density 0 = 40pts, density 0.5+ = 0pts
+        defect_score = max(0.0, 40.0 - density * 80.0)
     else:
-        defect_score = 40
+        defect_score = 40.0
 
-    # Rut depth score (0-20 points): < 5mm = 20, > 20mm = 0
-    rut_score = max(0, 20 - (rut_depth - 5) * 1.33) if rut_depth > 5 else 20
+    # Rut depth score (0-20 points)
+    rut_depth = max(0.0, min(rut_depth, 30.0))
+    if rut_depth < 5.0:
+        rut_score = 20.0
+    elif rut_depth < 10.0:
+        rut_score = 20.0 - (rut_depth - 5.0) * 2.0   # 20→10
+    elif rut_depth < 20.0:
+        rut_score = 10.0 - (rut_depth - 10.0) * 1.0  # 10→0
+    else:
+        rut_score = 0.0
 
     total = round(iri_score + defect_score + rut_score, 1)
     return min(100.0, max(0.0, total))

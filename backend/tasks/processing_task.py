@@ -44,6 +44,8 @@ def process_video(self, video_id: str, task_id: str):
         capture_value = video.get('capture_interval', 10.0)
         notification_email = (video.get('notification_email') or
                                task.get('notification_email') or '')
+        # User-provided start chainage — used as base for GPS chainage calculation
+        user_start_chainage = video.get('start_chainage', 0.0) or 0.0
 
         # ── Mark processing ───────────────────────────────────────────────────
         db.videos.update_one({"_id": ObjectId(video_id)},
@@ -93,7 +95,9 @@ def process_video(self, video_id: str, task_id: str):
         for frame_info in extract_frames_by_interval(
             video_path=video_path, output_dir=output_dir,
             capture_mode=capture_mode, capture_value=capture_value,
-            task_id=task_id, video_id=video_id, progress_callback=progress_cb
+            task_id=task_id, video_id=video_id,
+            user_start_chainage=user_start_chainage,
+            progress_callback=progress_cb
         ):
             frame = frame_info.pop('frame')
             total_frames += 1
@@ -310,13 +314,21 @@ def _aggregate_segments(detections: List[Dict], camera_type: str) -> List[Dict]:
     for seg in segments.values():
         if camera_type == "pave":
             total = sum(seg['defects'].values())
-            if total == 0:
+            frames = max(seg['frame_count'], 1)
+            # Defect density per frame (not raw count)
+            # A segment with 20 frames and 2 defects = 0.1 density = Good
+            # A segment with 20 frames and 20 defects = 1.0 density = Very Poor
+            density = total / frames
+
+            if density == 0:
                 seg['iri'] = 1.5; seg['condition'] = "Very Good"
-            elif total <= 2:
-                seg['iri'] = 2.5; seg['condition'] = "Good"
-            elif total <= 5:
-                seg['iri'] = 4.0; seg['condition'] = "Fair"
-            elif total <= 10:
+            elif density < 0.1:
+                seg['iri'] = 2.0; seg['condition'] = "Good"
+            elif density < 0.25:
+                seg['iri'] = 3.0; seg['condition'] = "Good"
+            elif density < 0.5:
+                seg['iri'] = 4.5; seg['condition'] = "Fair"
+            elif density < 0.75:
                 seg['iri'] = 6.0; seg['condition'] = "Poor"
             else:
                 seg['iri'] = 8.0; seg['condition'] = "Very Poor"
@@ -325,12 +337,29 @@ def _aggregate_segments(detections: List[Dict], camera_type: str) -> List[Dict]:
 
 
 def _extract_assets(detections: List[Dict]) -> List[Dict]:
-    """Extract flat list of assets from ROW detections."""
+    """
+    Extract flat list of assets from ROW detections.
+    Excludes vehicles — they are not road inventory assets.
+    """
+    # Asset types that belong in RIS sheets
+    VALID_ASSET_TYPES = {
+        'road_sign', 'crash_barrier', 'km_stone', 'street_light',
+        'wayside_amenity', 'culvert_bridge', 'drain', 'retaining_wall',
+        'utility_lines', 'median_divider', 'service_road',
+        'encroachment', 'hazard_marker', 'roadside_feature',
+    }
+    # Types to completely exclude from reports
+    EXCLUDE_TYPES = {'vehicle', 'skip', 'other_defect'}
+
     assets = []
     for det in detections:
         for d in det.get('detections', []):
+            asset_type = d.get('normalized_class', 'unknown')
+            # Skip vehicles and irrelevant classes
+            if asset_type in EXCLUDE_TYPES:
+                continue
             assets.append({
-                "asset_type": d.get('normalized_class', 'unknown'),
+                "asset_type": asset_type,
                 "confidence": d.get('confidence', 0),
                 "chainage": det.get('chainage'),
                 "latitude": det.get('latitude'),

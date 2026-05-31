@@ -39,10 +39,11 @@ def _serialize(doc) -> dict:
 @router.post("/upload")
 async def upload_video(
     task_id: str = Form(...),
-    camera_type: str = Form(...),          # "pave" or "row"
-    capture_mode: str = Form("interval"),  # "interval" or "fps"
-    capture_interval: float = Form(10.0),  # meters or fps value
+    camera_type: str = Form(...),
+    capture_mode: str = Form("interval"),
+    capture_interval: float = Form(10.0),
     notification_email: str = Form(""),
+    start_chainage: float = Form(0.0),   # User inputs actual start chainage (km)
     file: UploadFile = File(...),
 ):
     """
@@ -92,6 +93,7 @@ async def upload_video(
         "capture_mode": capture_mode,
         "capture_interval": capture_interval,
         "notification_email": notification_email,
+        "start_chainage": start_chainage,   # user-provided start chainage
         "status": "queued",
         "progress": 0,
         "total_frames_extracted": 0,
